@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - cubes</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #fff;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+
+				background-color: #050505;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+
+			a {
+
+				color: #ff0000;
+			}
+
+			#stats { position: absolute; top:0; left: 0 }
+			#stats #fps { background: transparent !important }
+			#stats #fps #fpsText { color: #fff !important }
+			#stats #fps #fpsGraph { display: none }
+
+		</style>
+	</head>
+	<body>
+
+		<div id="container"></div>
+		<div id="info"><a href="http://github.com/mrdoob/three.js" target="_blank">three.js</a> webgl - 150,000 cubes animated on GPU (1.8M triangles)</div>
+
+		<script src="js/three.min.cubes.js"></script>
+
+		<script src="js/Detector.js"></script>
+		<script src="js/libs/stats.min.js"></script>
+
+		<script>
+
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container, stats;
+
+			var camera, scene, renderer;
+
+			var mesh;
+
+			var clock = new THREE.Clock();
+
+			init();
+			animate();
+
+			function init() {
+
+				container = document.getElementById( 'container' );
+
+				//
+
+				camera = new THREE.PerspectiveCamera( 37, window.innerWidth / window.innerHeight, 1, 8000 );
+				camera.position.x = -500;
+				camera.position.y = 500;
+				camera.position.z = 1000;
+
+				scene = new THREE.Scene();
+
+				camera.lookAt( scene.position );
+
+                projector = new THREE.Projector();
+                mouseVector = new THREE.Vector3();
+
+                // create a light
+                var light = new THREE.PointLight(0xffffff);
+                light.position.set(0,250,500);
+                scene.add(light);
+                var ambientLight = new THREE.AmbientLight(0x111111);
+                scene.add(ambientLight);
+
+                // create a set of coordinate axes to help orient user
+                //    specify length in pixels in each direction
+                var axes = new THREE.AxisHelper(10);
+                scene.add( axes );
+
+                // 15 cubes
+				// 12 triangles per cube (6 quads)
+
+                var bigCube = 10;
+				var triangles = 12 * ( bigCube * bigCube * bigCube );
+
+				// BufferGeometry with unindexed triangles
+				// use vertex colors to store centers of rotations
+
+				var geometry = new THREE.BufferGeometry();
+
+				geometry.attributes = {
+
+					position: {
+						itemSize: 3,
+						array: new Float32Array( triangles * 3 * 3 ),
+						numItems: triangles * 3 * 3
+					},
+
+					normal: {
+						itemSize: 3,
+						array: new Float32Array( triangles * 3 * 3 ),
+						numItems: triangles * 3 * 3
+					}
+				}
+
+				var positions = geometry.attributes.position.array;
+				var normals = geometry.attributes.normal.array;
+
+				// Generate a single buffer with all the cubes
+
+				var n = 8000, n2 = n/2;	// triangles spread in the cube
+				var d = 10, d2 = d/2;	// individual triangle size
+
+				// These are all dummy variables
+
+				var pA = new THREE.Vector3();
+				var pB = new THREE.Vector3();
+				var pC = new THREE.Vector3();
+
+				var cb = new THREE.Vector3();
+				var ab = new THREE.Vector3();
+
+				var m = new THREE.Matrix4();
+				var m2 = new THREE.Matrix4();
+
+				var e = new THREE.Vector3( 0, 0, 0 );
+				var t = new THREE.Vector3(); // Used for saving triangle's coordinates
+				var tt = new THREE.Vector3();
+				var u = new THREE.Vector3( 0, 1, 0 );
+
+				var v1 = new THREE.Vector3( 0, 0, 0 );
+				var v2 = new THREE.Vector3( d, 0, 0 );
+				var v3 = new THREE.Vector3( d, d, 0 );
+				var v4 = new THREE.Vector3( 0, d, 0 );
+
+				var v1b = new THREE.Vector3( 0, 0, d );
+				var v2b = new THREE.Vector3( d, 0, d );
+				var v3b = new THREE.Vector3( d, d, d );
+				var v4b = new THREE.Vector3( 0, d, d );
+
+                /** Function for adding a triangle
+                 *
+                 * @param {number} k - Storage array index
+                 * @param {number} x - Triangle x's coordinate
+                 * @param {number} y - Triangle y's coordinate
+                 * @param {number} z - Triangle z's coordinate
+                 * @param {number} vc
+                 * @param {number} vb
+                 * @param {number} va
+                 */
+
+
+				function addTriangle( k, x, y, z, vc, vb, va ) {
+
+					// positions
+
+					pA.copy( va );
+					pB.copy( vb );
+					pC.copy( vc );
+
+					t.set( x, y, z );
+//					t.multiplyScalar( 0.5 );
+
+//					m.lookAt( e, tt, u );
+
+					m2.makeTranslation( t );
+
+					m2.multiplySelf( m );
+
+					m2.multiplyVector3( pA );
+					m2.multiplyVector3( pB );
+					m2.multiplyVector3( pC );
+
+                    // These are the vertexs
+					var ax = pA.x;
+					var ay = pA.y;
+					var az = pA.z;
+
+					var bx = pB.x;
+					var by = pB.y;
+					var bz = pB.z;
+
+					var cx = pC.x;
+					var cy = pC.y;
+					var cz = pC.z;
+
+					var j = k * 9;
+
+					positions[ j ]     = ax;
+					positions[ j + 1 ] = ay;
+					positions[ j + 2 ] = az;
+
+					positions[ j + 3 ] = bx;
+					positions[ j + 4 ] = by;
+					positions[ j + 5 ] = bz;
+
+					positions[ j + 6 ] = cx;
+					positions[ j + 7 ] = cy;
+					positions[ j + 8 ] = cz;
+
+					// flat face normals
+
+					pA.set( ax, ay, az );
+					pB.set( bx, by, bz );
+					pC.set( cx, cy, cz );
+
+					cb.sub( pC, pB );
+					ab.sub( pA, pB );
+					cb.crossSelf( ab );
+
+					cb.normalize();
+
+					var nx = cb.x;
+					var ny = cb.y;
+					var nz = cb.z;
+
+					normals[ j ]     = nx;
+					normals[ j + 1 ] = ny;
+					normals[ j + 2 ] = nz;
+
+					normals[ j + 3 ] = nx;
+					normals[ j + 4 ] = ny;
+					normals[ j + 5 ] = nz;
+
+					normals[ j + 6 ] = nx;
+					normals[ j + 7 ] = ny;
+					normals[ j + 8 ] = nz;
+
+				}
+
+				//
+
+				for ( var i = 0; i < triangles; i += 12 ) {
+
+//					var x = THREE.Math.randFloat( 0.1 * n, 0.2 * n ) * ( Math.random() > 0.5 ? 1 : -1 ) * THREE.Math.randInt( 0.5, 2 );
+//					var y = THREE.Math.randFloat( 0.1 * n, 0.2 * n ) * ( Math.random() > 0.5 ? 1 : -1 ) * THREE.Math.randInt( 0.5, 2 );
+//					var z = THREE.Math.randFloat( 0.1 * n, 0.2 * n ) * ( Math.random() > 0.5 ? 1 : -1 ) * THREE.Math.randInt( 0.5, 2 );
+					var x = ((i/12) % bigCube) * 15;
+                    // Normally z, changes level every l 2
+					var y = parseInt((i/12) / (bigCube * bigCube)) * 15;
+                    // Normally y, changes level every l
+                    var z = (parseInt((i/12) / bigCube) % bigCube) * 15;
+//                    console.log(i+'z: '+parseInt((i/12) / bigCube) % bigCube);
+
+					//
+
+					addTriangle( i, 	x, y, z, v1, v2, v4 );
+					addTriangle( i + 1, x, y, z, v2, v3, v4 );
+
+					addTriangle( i + 2, x, y, z, v4b, v2b, v1b );
+					addTriangle( i + 3, x, y, z, v4b, v3b, v2b );
+
+					//
+
+					addTriangle( i + 4, x, y, z, v1b, v2, v1 );
+					addTriangle( i + 5, x, y, z, v1b, v2b, v2 );
+
+
+					addTriangle( i + 6, x, y, z, v2b, v3, v2 );
+					addTriangle( i + 7, x, y, z, v2b, v3b, v3 );
+
+					//
+
+					addTriangle( i + 8, x, y, z, v3b, v4, v3 );
+					addTriangle( i + 9, x, y, z, v3b, v4b, v4 );
+
+					addTriangle( i + 10, x, y, z, v1, v4, v1b );
+					addTriangle( i + 11, x, y, z, v4, v4b, v1b );
+
+
+				}
+
+//				geometry.computeBoundingSphere();
+
+				// Set up custom shader material
+
+				uniforms = {
+
+					amplitude: { type: "f", value: 0.0 }
+
+				};
+
+				var material = new THREE.MeshPhongMaterial({color: 0x00ffff});
+
+				//
+
+				mesh = new THREE.Mesh( geometry, material );
+				scene.add( mesh );
+
+				//
+
+				renderer = new THREE.WebGLRenderer( { antialias: false, clearColor: 0x050505, clearAlpha: 1, alpha: false } );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+				container.appendChild( renderer.domElement );
+
+				//
+
+				stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.top = '0px';
+				container.appendChild( stats.domElement );
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+            window.addEventListener( 'mousemove', onMouseMove, false );
+
+            function onMouseMove(ev){
+                console.log('We\'re moving');
+                mouseVector.x = 2 * (ev.clientX / window.innerWidth) - 1;
+                mouseVector.y = 1 - 2 * ( ev.clientY / window.innerHeight );
+
+                var raycaster = projector.pickingRay( mouseVector.clone(), camera );
+                var intersects = raycaster.intersectObjects( scene.children );
+
+                console.log(intersects);
+            }
+			//
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+
+			}
+
+			function render() {
+
+				var time = Date.now() * 0.001;
+				var delta = clock.getDelta();
+
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+
+	</body>
+</html>
